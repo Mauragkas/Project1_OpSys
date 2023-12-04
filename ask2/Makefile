@@ -15,3 +15,8 @@ integral_mc_shm_sem: integral_mc_shm_sem.c
 
 clean:
 	rm -f bin/*
+
+.PHONY: all clean
+
+# Create the bin directory if it doesn't exist
+$(shell mkdir -p bin)
