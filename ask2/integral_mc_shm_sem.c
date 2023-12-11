@@ -28,6 +28,9 @@ void *thread_function(void *arg) {
     unsigned long chunk_size = *((unsigned long*)arg);
     double local_result = 0.0;
 
+    // Initialize random number generator with a unique seed for each thread
+    srand(time(NULL) ^ (unsigned int)pthread_self()); 
+
     for (unsigned long i = 0; i < chunk_size; i++) {
         double xi = (double)rand() / RAND_MAX;
         local_result += f(xi);

@@ -11,6 +11,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <time.h>
 
 double get_wtime(void) {
     struct timeval t;
@@ -28,6 +29,7 @@ double *initialize_shared_memory(int num_processes) {
 
 void calculate_integral(int process_index, double a, double h, unsigned long points_per_process, double *shared_results) {
     double res = 0.0;
+    srand(time(NULL) ^ (process_index + getpid())); // Seed rand_r with pid and time
     for (unsigned long j = 0; j < points_per_process; j++) {
         double xi = a + (process_index * points_per_process + j) * h;
         res += f(xi);
