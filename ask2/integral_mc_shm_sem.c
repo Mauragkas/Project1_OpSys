@@ -2,14 +2,17 @@
 1093513 Christodoulopoylos Efstathios Panagiotis
 1093514 Christodoulou Nikolaos
 1097445 Basilopoulos Basilios
-*/
+*/ 
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <math.h>
-#include <sys/time.h>
+#include <sys/wait.h>
+#include <sys/mman.h>
 #include <semaphore.h>
-#include <pthread.h>
+#include <time.h>
+#include <sys/time.h>
 
 double get_wtime(void) {
     struct timeval t;
@@ -17,74 +20,80 @@ double get_wtime(void) {
     return (double)t.tv_sec + (double)t.tv_usec * 1.0e-6;
 }
 
-inline double f(double x) {
+double f(double x) {
     return sin(cos(x));
 }
 
-sem_t semaphore;
-double result = 0.0; // Global variable to store the result
+void initialize_shared_resources(double **result, sem_t **semaphore) {
+    *result = mmap(NULL, sizeof(double), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    **result = 0.0;
 
-void *thread_function(void *arg) {
-    unsigned long chunk_size = *((unsigned long*)arg);
-    double local_result = 0.0;
-
-    // Initialize random number generator with a unique seed for each thread
-    srand(time(NULL) ^ (unsigned int)pthread_self()); 
-
-    for (unsigned long i = 0; i < chunk_size; i++) {
-        double xi = (double)rand() / RAND_MAX;
-        local_result += f(xi);
-    }
-
-    sem_wait(&semaphore);  // Entering critical section
-    result += local_result;
-    sem_post(&semaphore);  // Exiting critical section
-
-    return NULL;
+    *semaphore = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    sem_init(*semaphore, 1, 1);
 }
 
-int main(int argc, char * argv[]) {
-  double a = 0.0;
-  double b = 1.0;
-  unsigned long n = 24e7;
-  const double h = (b - a) / n;
-  const double ref = 0.73864299803689018;
-
-  int num_threads = 4;  // Default number of threads
-
-  if (argc == 2) {
-    num_threads = atoi(argv[1]);
-    if (num_threads <= 0) {
-      fprintf(stderr, "Number of threads must be positive.\n");
-      return 1;
+void calculate_integral(unsigned long chunk_size, double *result, sem_t *semaphore) {
+    double local_result = 0.0;
+    srand(time(NULL) ^ getpid());
+    
+    for (unsigned long i = 0; i < chunk_size; i++) {
+        local_result += f((double)rand() / RAND_MAX);
     }
-  }
 
-  pthread_t threads[num_threads];
-  unsigned long chunk_size = n / num_threads;
+    sem_wait(semaphore);
+    *result += local_result;
+    sem_post(semaphore);
+}
 
-  sem_init(&semaphore, 0, 1);  // Initialize semaphore
+void cleanup_shared_resources(double *result, sem_t *semaphore) {
+    sem_destroy(semaphore);
+    munmap(semaphore, sizeof(sem_t));
+    munmap(result, sizeof(double));
+}
 
-  double start_time = get_wtime();  // Start timer
+int main(int argc, char *argv[]) {
+    unsigned long n = 24e7;  // Total number of points
+    int num_processes = 4;   // Default number of processes
+    double ref = 0.73864299803689018;
 
-  //Create threads
-  for (int i = 0; i < num_threads; i++) {
-    pthread_create(&threads[i], NULL, thread_function, &chunk_size);
-  }
+    if (argc == 2) {
+        num_processes = atoi(argv[1]);
+        if (num_processes <= 0) {
+            fprintf(stderr, "Number of processes must be positive.\n");
+            return 1;
+        }
+    }
 
-  //Join threads
-  for (int i = 0; i < num_threads; i++) {
-    pthread_join(threads[i], NULL);
-  }
+    // Shared memory for result and semaphore
+    double *result;
+    sem_t *semaphore;
+    initialize_shared_resources(&result, &semaphore);
 
-  double end_time = get_wtime();  // Stop timer
+    unsigned long chunk_size = n / num_processes;
 
-  result *= h;
+    double start_time = get_wtime();
 
-  printf("Result=%.16f Error=%e Rel.Error=%e Time=%lf seconds\n",
-           result, fabs(result - ref), fabs(result - ref) / ref, end_time - start_time);
+    for (int i = 0; i < num_processes; i++) {
+        pid_t pid = fork();
+        if (pid == 0) {  // Child process
+            calculate_integral(chunk_size, result, semaphore);
+            exit(0);
+        }
+    }
 
-  sem_destroy(&semaphore);  // Destroy semaphore
+    // Parent process waits for all child processes
+    for (int i = 0; i < num_processes; i++) {
+        wait(NULL);
+    }
 
-  return 0;
+    double end_time = get_wtime();
+
+    double total_result = *result / n;
+    printf("Result=%.16f Error=%e Rel.Error=%e Time=%lf seconds\n",
+           total_result, fabs(total_result - ref), fabs(total_result - ref) / ref, end_time - start_time);
+
+    // Clean up
+    cleanup_shared_resources(result, semaphore);
+
+    return 0;
 }
