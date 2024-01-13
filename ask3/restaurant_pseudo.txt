@@ -49,16 +49,20 @@ begin
     # Process Helper_Beans
     repeat
       down(need_beans)
-      helper(beans)
-      beans += MAX_INGREDIENT_AMOUNT
+      while beans < REQUIRED_BEANS do
+        helper(beans)
+        beans += MAX_INGREDIENT_AMOUNT
+      end while
       up(cook)
     forever
 
     # Process Helper_Carrots
     repeat
       down(need_carrots)
-      helper(carrots)
-      carrots += MAX_INGREDIENT_AMOUNT
+      while carrots < REQUIRED_CARROTS do
+        helper(carrots)
+        carrots += MAX_INGREDIENT_AMOUNT
+      end while
       up(cook)
     forever
 
