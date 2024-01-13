@@ -1,0 +1,66 @@
+# 1093513 Christodoulopoulos Efstathios Panagiotis
+# 1093514 Christodoulo NIkolaos
+# 1097445 Basilopoulos Basilios
+
+*ΨΕΥΔΟΚΩΔΙΚΑΣ*
+const AM = 1093513
+const BASE_PORTIONS = AM[6]
+const MAX_INGREDIENT_AMOUNT = AM[4]
+const REQUIRED_BEANS = BASE_PORTIONS + 3
+const REQUIRED_CARROTS = BASE_PORTIONS
+
+var food, cook, need_beans, need_carrots: semaphore
+var beans, carrots: integer
+
+begin
+  food := BASE_PORTIONS + 5
+  cook := need_beans := need_carrots := beans := carrots := 0
+
+  cobegin
+    # Process Food
+    repeat
+      take_food()
+      down(food)
+      if food = 0 then
+        up(cook)
+      end if
+    forever
+
+    # Process Cook
+    repeat
+      if beans >= REQUIRED_BEANS and carrots >= REQUIRED_CARROTS then
+        cook_food()
+        beans -= REQUIRED_BEANS
+        carrots -= REQUIRED_CARROTS
+        food := BASE_PORTIONS + 5
+      else
+        if beans < REQUIRED_BEANS then
+          up(need_beans)
+        end if
+        if carrots < REQUIRED_CARROTS then
+          up(need_carrots)
+        end if
+      end if
+      down(cook)
+    forever
+
+    # Process Helper_Beans
+    repeat
+      down(need_beans)
+      helper(beans)
+      beans += MAX_INGREDIENT_AMOUNT
+      up(cook)
+    forever
+
+    # Process Helper_Carrots
+    repeat
+      down(need_carrots)
+      helper(carrots)
+      carrots += MAX_INGREDIENT_AMOUNT
+      up(cook)
+    forever
+
+  coend
+end
+
+*ΤΕΛΟΣ ΨΕΥΔΟΚΩΔΙΚΑΣ*
